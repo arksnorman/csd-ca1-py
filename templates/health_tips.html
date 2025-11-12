@@ -1,0 +1,33 @@
+{% extends "layout.html" %} {% block content %}
+<div class="row">
+  <div class="col-md-12">
+    <h2>Health Tips by Blood Pressure Category</h2>
+    <p class="lead">
+      Personalized health recommendations based on your blood pressure reading.
+    </p>
+
+    {% for category_name, tips in tips_by_category.items() %}
+    <div class="card mb-4">
+      <div
+        class="card-header {% if 'Low' in category_name %}bg-info text-white{% elif 'Ideal' in category_name %}bg-success text-white{% elif 'Pre-High' in category_name %}bg-warning{% else %}bg-danger text-white{% endif %}"
+      >
+        <h4 class="mb-0">{{ category_name }}</h4>
+      </div>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+          {% for tip in tips %}
+          <li class="list-group-item">{{ tip }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endfor %}
+
+    <div class="mt-4">
+      <a href="{{ url_for('index') }}" class="btn btn-primary"
+        >Back to Calculator</a
+      >
+    </div>
+  </div>
+</div>
+{% endblock %}

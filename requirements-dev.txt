@@ -1,0 +1,16 @@
+# Development dependencies (not needed in production)
+# Install with: pip install -r requirements-dev.txt
+
+-r requirements.txt
+
+# Additional dev tools
+ipython==8.18.1
+ipdb==0.13.13
+
+# Documentation
+sphinx==7.2.6
+sphinx-rtd-theme==2.0.0
+
+# Type checking
+mypy==1.7.1
+types-Flask==1.1.6
