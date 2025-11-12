@@ -30,11 +30,12 @@ jobs:
 
       - name: Install dependencies
         run: |
+          # Install dependencies for Playwright
+          apt-get install -y libasound2t64
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install playwright
           playwright install chromium
-          playwright install-deps chromium
 
       - name: Lint with flake8
         run: |
