@@ -2,7 +2,6 @@
 
 import pytest
 from app import app
-from models.blood_pressure import BPCategory
 
 
 @pytest.fixture
