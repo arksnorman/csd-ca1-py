@@ -10,8 +10,13 @@ from models.health_tips import HealthTips
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "secret123")
 
+HOST = os.environ.get("HOST", "127.0.0.1")
+PORT = int(os.environ.get("PORT", 5000))
+MODE = os.environ.get("MODE", "prod")
+
 # Setup Application Insights telemetry if configured
 connection_string = os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING")
+
 if connection_string:
     try:
         from azure.monitor.opentelemetry import configure_azure_monitor
@@ -115,4 +120,4 @@ def internal_error(error):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=(MODE != "prod"), host=HOST, port=PORT)
