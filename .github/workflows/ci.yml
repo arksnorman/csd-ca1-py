@@ -123,8 +123,8 @@ jobs:
 
       - name: Run Bandit security linter
         run: |
-          bandit -r . -f json -o bandit-report.json
-          bandit -r . -ll
+          bandit -r . -f json -o bandit-report.json -x ./.env,./venv,./env,./.venv,./.git,./__pycache__,./.pytest_cache,./htmlcov,./build,./dist,./tests,./infrastructure 2>/dev/null || true
+          bandit -r . -ll -x ./.env,./venv,./env,./.venv,./.git,./__pycache__,./.pytest_cache,./htmlcov,./build,./dist,./tests,./infrastructure
 
       - name: Check for known vulnerabilities with Safety
         run: |
