@@ -1,21 +1,16 @@
-AWSTemplateFormatVersion: "2010-09-09"
-Description: "Blood Pressure Calculator - Elastic Beanstalk Infrastructure"
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Blood Pressure Calculator - EC2 Infrastructure'
 
 Parameters:
   ApplicationName:
     Type: String
     Default: bp-calculator-app
-    Description: Name of the Elastic Beanstalk application
+    Description: Name of the application
 
-  EnvironmentName:
+  KeyName:
     Type: String
-    Default: bp-calculator-env
-    Description: Name of the Elastic Beanstalk environment
-
-  S3BucketName:
-    Type: String
-    Default: bp-calculator-deployments
-    Description: S3 bucket for deployment artifacts
+    Default: bp-py
+    Description: EC2 Key Pair name for SSH access
 
   InstanceType:
     Type: String
@@ -26,116 +21,37 @@ Parameters:
       - t2.small
       - t2.medium
 
-  PythonVersion:
-    Type: String
-    Default: "3.12"
-    Description: Python version for the application
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: Latest Amazon Linux 2023 AMI
 
 Resources:
-  # Elastic Beanstalk Application
-  ElasticBeanstalkApplication:
-    Type: AWS::ElasticBeanstalk::Application
+  # Security Group for EC2 Instance
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
     Properties:
-      ApplicationName: !Ref ApplicationName
-      Description: Blood Pressure Calculator Flask Application
+      GroupDescription: Security group for BP Calculator EC2 instance
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: Allow HTTP traffic
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: Allow SSH access
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic
+      Tags:
+        - Key: Name
+          Value: !Sub '${ApplicationName}-sg'
 
-  # Elastic Beanstalk Environment
-  ElasticBeanstalkEnvironment:
-    Type: AWS::ElasticBeanstalk::Environment
-    Properties:
-      ApplicationName: !Ref ElasticBeanstalkApplication
-      EnvironmentName: !Ref EnvironmentName
-      SolutionStackName: "64bit Amazon Linux 2023 v4.8.0 running Python 3.12"
-      OptionSettings:
-        # Instance settings
-        - Namespace: aws:autoscaling:launchconfiguration
-          OptionName: InstanceType
-          Value: !Ref InstanceType
-
-        - Namespace: aws:autoscaling:launchconfiguration
-          OptionName: IamInstanceProfile
-          Value: !Ref InstanceProfile
-
-        # Auto scaling settings
-        - Namespace: aws:autoscaling:asg
-          OptionName: MinSize
-          Value: "1"
-
-        - Namespace: aws:autoscaling:asg
-          OptionName: MaxSize
-          Value: "2"
-
-        # Load balancer settings
-        - Namespace: aws:elasticbeanstalk:environment
-          OptionName: EnvironmentType
-          Value: SingleInstance
-
-        - Namespace: aws:elasticbeanstalk:environment
-          OptionName: ServiceRole
-          Value: !Ref ServiceRole
-
-        # Python settings
-        - Namespace: aws:elasticbeanstalk:container:python
-          OptionName: WSGIPath
-          Value: app:app
-
-        # Environment variables
-        - Namespace: aws:elasticbeanstalk:application:environment
-          OptionName: FLASK_ENV
-          Value: production
-
-        - Namespace: aws:elasticbeanstalk:application:environment
-          OptionName: SECRET_KEY
-          Value: !Sub '{{resolve:secretsmanager:${FlaskSecretKey}:SecretString:secret_key}}'
-
-        - Namespace: aws:elasticbeanstalk:application:environment
-          OptionName: CLOUDWATCH_ENABLED
-          Value: 'true'
-
-        - Namespace: aws:elasticbeanstalk:application:environment
-          OptionName: AWS_REGION
-          Value: !Ref 'AWS::Region'
-
-        # Enable X-Ray
-        - Namespace: aws:elasticbeanstalk:xray
-          OptionName: XRayEnabled
-          Value: 'true'
-
-        # Health check settings
-        - Namespace: aws:elasticbeanstalk:healthreporting:system
-          OptionName: SystemType
-          Value: enhanced
-
-        # Deployment settings
-        - Namespace: aws:elasticbeanstalk:command
-          OptionName: DeploymentPolicy
-          Value: AllAtOnce
-
-        # Logs
-        - Namespace: aws:elasticbeanstalk:cloudwatch:logs
-          OptionName: StreamLogs
-          Value: "true"
-
-        - Namespace: aws:elasticbeanstalk:cloudwatch:logs
-          OptionName: DeleteOnTerminate
-          Value: "false"
-
-  # IAM Role for Elastic Beanstalk Service
-  ServiceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: elasticbeanstalk.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkEnhancedHealth
-        - arn:aws:iam::aws:policy/AWSElasticBeanstalkManagedUpdatesCustomerRolePolicy
-
-  # IAM Role for EC2 Instances
+  # IAM Role for EC2 Instance
   InstanceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -147,10 +63,9 @@ Resources:
               Service: ec2.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier
-        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWorkerTier
         - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
         - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
       Policies:
         - PolicyName: SecretsManagerAccess
           PolicyDocument:
@@ -171,6 +86,17 @@ Resources:
                   - logs:PutLogEvents
                   - logs:DescribeLogStreams
                 Resource: 'arn:aws:logs:*:*:*'
+        - PolicyName: S3DeploymentAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - 'arn:aws:s3:::bp-deploy-temp-*'
+                  - 'arn:aws:s3:::bp-deploy-temp-*/*'
 
   # Instance Profile
   InstanceProfile:
@@ -191,22 +117,103 @@ Resources:
         PasswordLength: 32
         ExcludeCharacters: '"@/\'
 
+  # EC2 Instance
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      IamInstanceProfile: !Ref InstanceProfile
+      SecurityGroupIds:
+        - !Ref InstanceSecurityGroup
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          
+          # Update system
+          yum update -y
+          
+          # Install Python 3.12 and required packages
+          yum install -y python3.12 python3.12-pip git
+          
+          # Create app directory
+          mkdir -p /opt/bp-calculator
+          cd /opt/bp-calculator
+          
+          # Get SECRET_KEY from Secrets Manager
+          SECRET_KEY=$(aws secretsmanager get-secret-value \
+            --secret-id ${FlaskSecretKey} \
+            --region ${AWS::Region} \
+            --query SecretString \
+            --output text | python3.12 -c "import sys, json; print(json.load(sys.stdin)['secret_key'])")
+          
+          # Create environment file
+          cat > /opt/bp-calculator/.env << EOF
+          FLASK_ENV=production
+          SECRET_KEY=$SECRET_KEY
+          CLOUDWATCH_ENABLED=true
+          AWS_REGION=${AWS::Region}
+          HOST=0.0.0.0
+          PORT=80
+          EOF
+          
+          # Create systemd service file
+          cat > /etc/systemd/system/bp-calculator.service << 'EOF'
+          [Unit]
+          Description=BP Calculator Flask Application
+          After=network.target
+          
+          [Service]
+          Type=simple
+          User=root
+          WorkingDirectory=/opt/bp-calculator
+          Environment="PATH=/usr/bin"
+          EnvironmentFile=/opt/bp-calculator/.env
+          ExecStart=/usr/bin/gunicorn --bind 0.0.0.0:80 --workers 4 --timeout 600 app:app
+          Restart=always
+          RestartSec=10
+          
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+          
+          # Enable and start service (will fail initially until code is deployed)
+          systemctl daemon-reload
+          systemctl enable bp-calculator.service
+          
+          # Signal CloudFormation that instance is ready
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region} || true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ApplicationName}-instance'
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+
 Outputs:
-  ApplicationName:
-    Description: Elastic Beanstalk Application Name
-    Value: !Ref ElasticBeanstalkApplication
+  InstanceId:
+    Description: EC2 Instance ID
+    Value: !Ref EC2Instance
     Export:
-      Name: !Sub "${AWS::StackName}-ApplicationName"
+      Name: !Sub '${AWS::StackName}-InstanceId'
 
-  EnvironmentName:
-    Description: Elastic Beanstalk Environment Name
-    Value: !Ref ElasticBeanstalkEnvironment
+  PublicDNS:
+    Description: Public DNS name of the EC2 instance
+    Value: !GetAtt EC2Instance.PublicDnsName
     Export:
-      Name: !Sub "${AWS::StackName}-EnvironmentName"
+      Name: !Sub '${AWS::StackName}-PublicDNS'
 
-  EnvironmentURL:
-    Description: URL of the Elastic Beanstalk environment
-    Value: !GetAtt ElasticBeanstalkEnvironment.EndpointURL
+  PublicIP:
+    Description: Public IP address of the EC2 instance
+    Value: !GetAtt EC2Instance.PublicIp
+    Export:
+      Name: !Sub '${AWS::StackName}-PublicIP'
+
+  ApplicationURL:
+    Description: URL of the application
+    Value: !Sub 'http://${EC2Instance.PublicDnsName}'
 
   SecretKeyArn:
     Description: ARN of the Flask secret key in Secrets Manager

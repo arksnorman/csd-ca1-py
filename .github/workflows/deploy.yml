@@ -12,10 +12,9 @@ on:
 
 env:
   AWS_REGION: eu-west-1
-  EB_APPLICATION_NAME: bp-calculator-app
-  EB_ENVIRONMENT_NAME: bp-calculator-env
+  APPLICATION_NAME: bp-calculator-app
   PYTHON_VERSION: "3.12"
-  S3_BUCKET: bp-calculator-deployments
+  KEY_NAME: bp-py
 
 jobs:
   # Check if CI passed
@@ -42,37 +41,17 @@ jobs:
 
       - name: Create deployment package
         run: |
-          # Create .ebextensions directory for Elastic Beanstalk configuration
-          mkdir -p .ebextensions
-
-          # Create Elastic Beanstalk configuration
-          cat > .ebextensions/python.config << 'EOF'
-          option_settings:
-            aws:elasticbeanstalk:container:python:
-              WSGIPath: app:app
-            aws:elasticbeanstalk:application:environment:
-              FLASK_ENV: production
-          EOF
-
-          # Create .platform directory for Amazon Linux 2023
-          mkdir -p .platform/hooks/postdeploy
-
-          # Copy startup script if needed
-          if [ -f startup.sh ]; then
-            cp startup.sh .platform/hooks/postdeploy/01_startup.sh
-            chmod +x .platform/hooks/postdeploy/01_startup.sh
-          fi
-
-          # Create deployment package (Elastic Beanstalk expects source code, not a zip)
+          # Create deployment package with application code
           zip -r deployment.zip . \
             -x "*.git*" \
-            -x "*.env/*" \
+            -x "*.env" \
             -x "*venv/*" \
             -x "*tests/*" \
             -x "*htmlcov/*" \
             -x "*.pytest_cache/*" \
             -x "*__pycache__/*" \
-            -x "*infrastructure/*"
+            -x "*infrastructure/*" \
+            -x "*.github/*"
 
       - name: Upload deployment package
         uses: actions/upload-artifact@v4
@@ -97,37 +76,27 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Create S3 bucket for deployments
-        run: |
-          if ! aws s3 ls s3://${{ env.S3_BUCKET }} 2>&1 | grep -q 'NoSuchBucket'; then
-            echo "S3 bucket already exists"
-          else
-            aws s3 mb s3://${{ env.S3_BUCKET }} --region ${{ env.AWS_REGION }}
-            echo "S3 bucket created"
-          fi
-
       - name: Deploy CloudFormation stack
         run: |
           aws cloudformation deploy \
             --template-file infrastructure/cloudformation.yml \
             --stack-name bp-calculator-stack \
             --parameter-overrides \
-              ApplicationName=${{ env.EB_APPLICATION_NAME }} \
-              EnvironmentName=${{ env.EB_ENVIRONMENT_NAME }} \
-              S3BucketName=${{ env.S3_BUCKET }} \
+              ApplicationName=${{ env.APPLICATION_NAME }} \
+              KeyName=${{ env.KEY_NAME }} \
             --capabilities CAPABILITY_IAM \
             --region ${{ env.AWS_REGION }}
 
-      - name: Get Environment URL
-        id: eb
+      - name: Get EC2 Instance DNS
+        id: ec2
         run: |
-          EB_URL=$(aws elasticbeanstalk describe-environments \
-            --environment-names ${{ env.EB_ENVIRONMENT_NAME }} \
-            --query "Environments[0].CNAME" \
+          EC2_DNS=$(aws cloudformation describe-stacks \
+            --stack-name bp-calculator-stack \
+            --query "Stacks[0].Outputs[?OutputKey=='PublicDNS'].OutputValue" \
             --output text \
             --region ${{ env.AWS_REGION }})
-          echo "environment_url=http://$EB_URL" >> $GITHUB_OUTPUT
-          echo "Environment URL: http://$EB_URL"
+          echo "instance_dns=$EC2_DNS" >> $GITHUB_OUTPUT
+          echo "EC2 Instance DNS: $EC2_DNS"
 
   # Application Deployment Job
   deploy-application:
@@ -148,35 +117,76 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Upload to S3
+      - name: Get EC2 Instance ID
+        id: instance
         run: |
-          VERSION_LABEL="v${{ github.run_number }}-${{ github.sha }}"
-          aws s3 cp deployment.zip s3://${{ env.S3_BUCKET }}/$VERSION_LABEL.zip
-          echo "VERSION_LABEL=$VERSION_LABEL" >> $GITHUB_ENV
+          INSTANCE_ID=$(aws cloudformation describe-stacks \
+            --stack-name bp-calculator-stack \
+            --query "Stacks[0].Outputs[?OutputKey=='InstanceId'].OutputValue" \
+            --output text \
+            --region ${{ env.AWS_REGION }})
+          echo "instance_id=$INSTANCE_ID" >> $GITHUB_OUTPUT
+          echo "Instance ID: $INSTANCE_ID"
 
-      - name: Create Elastic Beanstalk application version
+      - name: Deploy application to EC2
         run: |
-          aws elasticbeanstalk create-application-version \
-            --application-name ${{ env.EB_APPLICATION_NAME }} \
-            --version-label $VERSION_LABEL \
-            --source-bundle S3Bucket=${{ env.S3_BUCKET }},S3Key=$VERSION_LABEL.zip \
+          # Get instance ID
+          INSTANCE_ID="${{ steps.instance.outputs.instance_id }}"
+          
+          # Copy deployment package to EC2 instance using SSM
+          aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters 'commands=[
+              "cd /tmp",
+              "rm -rf bp-calculator-deploy",
+              "mkdir -p bp-calculator-deploy"
+            ]' \
             --region ${{ env.AWS_REGION }}
-
-      - name: Deploy to Elastic Beanstalk
-        run: |
-          aws elasticbeanstalk update-environment \
-            --application-name ${{ env.EB_APPLICATION_NAME }} \
-            --environment-name ${{ env.EB_ENVIRONMENT_NAME }} \
-            --version-label $VERSION_LABEL \
+          
+          sleep 5
+          
+          # Upload file via S3 (temporary bucket for transfer)
+          TEMP_BUCKET="bp-deploy-temp-${{ github.run_number }}"
+          aws s3 mb s3://$TEMP_BUCKET --region ${{ env.AWS_REGION }} || true
+          aws s3 cp deployment.zip s3://$TEMP_BUCKET/deployment.zip
+          
+          # Download and extract on EC2
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "commands=[
+              'cd /tmp/bp-calculator-deploy',
+              'aws s3 cp s3://$TEMP_BUCKET/deployment.zip .',
+              'unzip -o deployment.zip',
+              'pip3.12 install -r requirements.txt',
+              'rm -rf /opt/bp-calculator/*',
+              'cp -r * /opt/bp-calculator/',
+              'systemctl restart bp-calculator.service',
+              'sleep 3',
+              'systemctl status bp-calculator.service'
+            ]" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Command.CommandId' \
+            --output text)
+          
+          echo "Command ID: $COMMAND_ID"
+          
+          # Wait for command to complete
+          sleep 10
+          aws ssm wait command-executed \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --region ${{ env.AWS_REGION }} || true
+          
+          # Get command output
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" \
             --region ${{ env.AWS_REGION }}
-
-      - name: Wait for deployment
-        run: |
-          echo "Waiting for environment to update..."
-          aws elasticbeanstalk wait environment-updated \
-            --application-name ${{ env.EB_APPLICATION_NAME }} \
-            --environment-names ${{ env.EB_ENVIRONMENT_NAME }} \
-            --region ${{ env.AWS_REGION }}
+          
+          # Cleanup temp S3 bucket
+          aws s3 rb s3://$TEMP_BUCKET --force --region ${{ env.AWS_REGION }} || true
 
   # E2E Tests Job (runs after deployment)
   e2e-tests:
@@ -208,14 +218,15 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Get Environment URL
-        id: eb
+        id: ec2
         run: |
-          EB_URL=$(aws elasticbeanstalk describe-environments \
-            --environment-names ${{ env.EB_ENVIRONMENT_NAME }} \
-            --query "Environments[0].CNAME" \
+          EC2_DNS=$(aws cloudformation describe-stacks \
+            --stack-name bp-calculator-stack \
+            --query "Stacks[0].Outputs[?OutputKey=='PublicDNS'].OutputValue" \
             --output text \
             --region ${{ env.AWS_REGION }})
-          echo "BASE_URL=http://$EB_URL" >> $GITHUB_ENV
+          echo "BASE_URL=http://$EC2_DNS" >> $GITHUB_ENV
+          echo "Application URL: http://$EC2_DNS"
 
       - name: Wait for application to be ready
         run: |
