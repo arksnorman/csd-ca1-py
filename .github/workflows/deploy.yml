@@ -78,22 +78,30 @@ jobs:
 
       - name: Deploy CloudFormation stack
         run: |
+          # Get branch name (remove refs/heads/ prefix)
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+          # Sanitize branch name for CloudFormation (alphanumeric and hyphens only)
+          STACK_SUFFIX=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9-]/-/g' | tr '[:upper:]' '[:lower:]')
+          
           aws cloudformation deploy \
             --template-file infrastructure/cloudformation.yml \
-            --stack-name bp-calculator-stack \
+            --stack-name bp-calculator-$STACK_SUFFIX \
             --parameter-overrides \
               ApplicationName=${{ env.APPLICATION_NAME }} \
               KeyName=${{ env.KEY_NAME }} \
+              BranchName=$STACK_SUFFIX \
               VpcId=vpc-0393d1315f5e64c75 \
               SubnetId=subnet-058dde5de2753fae4 \
             --capabilities CAPABILITY_IAM \
             --region ${{ env.AWS_REGION }}
+          
+          echo "STACK_NAME=bp-calculator-$STACK_SUFFIX" >> $GITHUB_ENV
 
       - name: Get EC2 Instance DNS
         id: ec2
         run: |
           EC2_DNS=$(aws cloudformation describe-stacks \
-            --stack-name bp-calculator-stack \
+            --stack-name ${{ env.STACK_NAME }} \
             --query "Stacks[0].Outputs[?OutputKey=='PublicDNS'].OutputValue" \
             --output text \
             --region ${{ env.AWS_REGION }})
@@ -122,13 +130,19 @@ jobs:
       - name: Get EC2 Instance ID
         id: instance
         run: |
+          # Get branch name and sanitize
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+          STACK_SUFFIX=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9-]/-/g' | tr '[:upper:]' '[:lower:]')
+          STACK_NAME="bp-calculator-$STACK_SUFFIX"
+          
           INSTANCE_ID=$(aws cloudformation describe-stacks \
-            --stack-name bp-calculator-stack \
+            --stack-name $STACK_NAME \
             --query "Stacks[0].Outputs[?OutputKey=='InstanceId'].OutputValue" \
             --output text \
             --region ${{ env.AWS_REGION }})
           echo "instance_id=$INSTANCE_ID" >> $GITHUB_OUTPUT
           echo "Instance ID: $INSTANCE_ID"
+          echo "STACK_NAME=$STACK_NAME" >> $GITHUB_ENV
 
       - name: Deploy application to EC2
         run: |
@@ -222,8 +236,13 @@ jobs:
       - name: Get Environment URL
         id: ec2
         run: |
+          # Get branch name and sanitize
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+          STACK_SUFFIX=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9-]/-/g' | tr '[:upper:]' '[:lower:]')
+          STACK_NAME="bp-calculator-$STACK_SUFFIX"
+          
           EC2_DNS=$(aws cloudformation describe-stacks \
-            --stack-name bp-calculator-stack \
+            --stack-name $STACK_NAME \
             --query "Stacks[0].Outputs[?OutputKey=='PublicDNS'].OutputValue" \
             --output text \
             --region ${{ env.AWS_REGION }})

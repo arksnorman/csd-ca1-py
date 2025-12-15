@@ -12,6 +12,11 @@ Parameters:
     Default: bp-py
     Description: EC2 Key Pair name for SSH access
 
+  BranchName:
+    Type: String
+    Default: main
+    Description: Git branch name (used to create separate instances per branch)
+
   VpcId:
     Type: String
     Default: vpc-0393d1315f5e64c75
@@ -31,10 +36,10 @@ Parameters:
       - t2.small
       - t2.medium
 
-  LatestAmiId:
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
-    Description: Latest Amazon Linux 2023 AMI
+  AmiId:
+    Type: String
+    Default: ami-049442a6cf8319180
+    Description: Ubuntu AMI ID
 
 Resources:
   # Security Group for EC2 Instance
@@ -60,7 +65,7 @@ Resources:
           Description: Allow all outbound traffic
       Tags:
         - Key: Name
-          Value: !Sub '${ApplicationName}-sg'
+          Value: !Sub '${ApplicationName}-${BranchName}-sg'
 
   # IAM Role for EC2 Instance
   InstanceRole:
@@ -120,7 +125,7 @@ Resources:
   FlaskSecretKey:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: !Sub "${ApplicationName}-flask-secret-key"
+      Name: !Sub "${ApplicationName}-${BranchName}-flask-secret-key"
       Description: Flask application secret key
       GenerateSecretString:
         SecretStringTemplate: "{}"
@@ -132,7 +137,7 @@ Resources:
   EC2Instance:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: !Ref LatestAmiId
+      ImageId: !Ref AmiId
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyName
       IamInstanceProfile: !Ref InstanceProfile
@@ -145,10 +150,17 @@ Resources:
           set -e
           
           # Update system
-          yum update -y
+          apt-get update -y
+          DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
           
           # Install Python 3.12 and required packages
-          yum install -y python3.12 python3.12-pip git
+          apt-get install -y python3.12 python3.12-venv python3-pip git unzip awscli
+          
+          # Create symbolic link for python3.12
+          update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
+          
+          # Install pip for Python 3.12
+          curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
           
           # Create app directory
           mkdir -p /opt/bp-calculator
@@ -181,9 +193,9 @@ Resources:
           Type=simple
           User=root
           WorkingDirectory=/opt/bp-calculator
-          Environment="PATH=/usr/bin"
+          Environment="PATH=/usr/local/bin:/usr/bin:/bin"
           EnvironmentFile=/opt/bp-calculator/.env
-          ExecStart=/usr/bin/gunicorn --bind 0.0.0.0:80 --workers 4 --timeout 600 app:app
+          ExecStart=/usr/local/bin/gunicorn --bind 0.0.0.0:80 --workers 4 --timeout 600 app:app
           Restart=always
           RestartSec=10
           
@@ -195,11 +207,17 @@ Resources:
           systemctl daemon-reload
           systemctl enable bp-calculator.service
           
+          # Install CloudFormation helper scripts for Ubuntu
+          apt-get install -y python3-pip
+          pip3 install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+          
           # Signal CloudFormation that instance is ready
-          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region} || true
+          /usr/local/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region} || true
       Tags:
         - Key: Name
-          Value: !Sub '${ApplicationName}-instance'
+          Value: !Sub '${ApplicationName}-${BranchName}-instance'
+        - Key: Branch
+          Value: !Ref BranchName
     CreationPolicy:
       ResourceSignal:
         Timeout: PT15M
@@ -209,19 +227,19 @@ Outputs:
     Description: EC2 Instance ID
     Value: !Ref EC2Instance
     Export:
-      Name: !Sub '${AWS::StackName}-InstanceId'
+      Name: !Sub '${AWS::StackName}-${BranchName}-InstanceId'
 
   PublicDNS:
     Description: Public DNS name of the EC2 instance
     Value: !GetAtt EC2Instance.PublicDnsName
     Export:
-      Name: !Sub '${AWS::StackName}-PublicDNS'
+      Name: !Sub '${AWS::StackName}-${BranchName}-PublicDNS'
 
   PublicIP:
     Description: Public IP address of the EC2 instance
     Value: !GetAtt EC2Instance.PublicIp
     Export:
-      Name: !Sub '${AWS::StackName}-PublicIP'
+      Name: !Sub '${AWS::StackName}-${BranchName}-PublicIP'
 
   ApplicationURL:
     Description: URL of the application
@@ -231,4 +249,4 @@ Outputs:
     Description: ARN of the Flask secret key in Secrets Manager
     Value: !Ref FlaskSecretKey
     Export:
-      Name: !Sub "${AWS::StackName}-SecretKeyArn"
+      Name: !Sub "${AWS::StackName}-${BranchName}-SecretKeyArn"
