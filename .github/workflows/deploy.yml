@@ -180,9 +180,10 @@ jobs:
               'sudo cp -r * /opt/bp-calculator/',
               'sudo mv /tmp/bp-calculator-env-backup /opt/bp-calculator/.env',
               'cd /opt/bp-calculator',
-              'sudo python3.12 -m venv venv',
-              'sudo venv/bin/pip install --upgrade pip',
-              'sudo venv/bin/pip install -r requirements.txt',
+              'pwd;whoami',
+              'sudo python3 -m venv venv',
+              'sudo /opt/bp-calculator/venv/bin/pip install --upgrade pip',
+              'sudo /opt/bp-calculator/venv/bin/pip install -r requirements.txt',
               'sudo systemctl restart bp-calculator.service',
               'sleep 3',
               'sudo systemctl status bp-calculator.service'
