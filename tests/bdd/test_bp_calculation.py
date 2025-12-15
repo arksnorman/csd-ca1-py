@@ -43,6 +43,6 @@ def calculate_category(context):
 def check_category(context, expected_category):
     """Check the calculated category"""
     actual_category = context["category"].value
-    assert actual_category == expected_category, (
-        f"Expected '{expected_category}' but got '{actual_category}'"
-    )
+    assert (
+        actual_category == expected_category
+    ), f"Expected '{expected_category}' but got '{actual_category}'"

@@ -16,9 +16,7 @@ MODE = os.environ.get("MODE", "prod")
 
 # Setup AWS X-Ray and CloudWatch if configured
 aws_region = os.environ.get("AWS_REGION", "us-east-1")
-cloudwatch_enabled = (
-    os.environ.get("CLOUDWATCH_ENABLED", "false").lower() == "true"
-)
+cloudwatch_enabled = os.environ.get("CLOUDWATCH_ENABLED", "false").lower() == "true"
 
 if cloudwatch_enabled:
     try:
@@ -43,16 +41,12 @@ if cloudwatch_enabled:
         logger.addHandler(cloudwatch_handler)
         app.logger.addHandler(cloudwatch_handler)
 
-        logger.info(
-            "AWS X-Ray and CloudWatch monitoring initialized successfully"
-        )
+        logger.info("AWS X-Ray and CloudWatch monitoring initialized successfully")
         app.logger.info("AWS monitoring configured")
     except Exception as e:
         app.logger.warning(f"Failed to initialize AWS monitoring: {e}")
 else:
-    app.logger.warning(
-        "CLOUDWATCH_ENABLED not set to 'true' - AWS monitoring disabled"
-    )
+    app.logger.warning("CLOUDWATCH_ENABLED not set to 'true' - AWS monitoring disabled")
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -66,15 +60,11 @@ def index():
 
     if form.validate_on_submit():
         # Create BloodPressure object
-        bp = BloodPressure(
-            systolic=form.systolic.data, diastolic=form.diastolic.data
-        )
+        bp = BloodPressure(systolic=form.systolic.data, diastolic=form.diastolic.data)
 
         # Extra validation: Systolic must be greater than Diastolic
         if bp.systolic <= bp.diastolic:
-            form.systolic.errors.append(
-                "Systolic must be greater than Diastolic"
-            )
+            form.systolic.errors.append("Systolic must be greater than Diastolic")
             app.logger.warning(
                 f"Validation failed: systolic={bp.systolic} <= diastolic={bp.diastolic}"
             )
@@ -118,9 +108,7 @@ def health_tips():
         "High Blood Pressure": HealthTips.get_tips(bp_high.category),
     }
     app.logger.info("Health tips page accessed")
-    return render_template(
-        "health_tips.html", tips_by_category=tips_by_category
-    )
+    return render_template("health_tips.html", tips_by_category=tips_by_category)
 
 
 @app.route("/favicon.ico")
