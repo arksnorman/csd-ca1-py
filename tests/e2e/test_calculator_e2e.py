@@ -1,11 +1,12 @@
 """End-to-end tests using Playwright"""
 
+import os
 import pytest
 from playwright.sync_api import Page, expect
 
 
 # Base URL for the application
-BASE_URL = "http://localhost:5000"
+BASE_URL = os.environ.get("BASE_URL", "http://localhost:5000")
 
 
 @pytest.fixture(scope="session")

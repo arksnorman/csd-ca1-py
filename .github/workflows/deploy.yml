@@ -223,7 +223,11 @@ jobs:
 
       - name: Run E2E tests
         run: |
-          pytest tests/e2e/ -v --tb=short
+          mkdir -p test-results
+          pytest tests/e2e/ -v --tb=short \
+            --html=test-results/report.html \
+            --self-contained-html \
+            --junit-xml=test-results/junit.xml
         env:
           BASE_URL: ${{ env.BASE_URL }}
         continue-on-error: true

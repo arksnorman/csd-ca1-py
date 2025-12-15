@@ -17,6 +17,7 @@ pytest-cov==4.1.0
 pytest-bdd==7.0.1
 pytest-playwright==0.4.3
 playwright==1.40.0
+pytest-html==4.1.1
 
 # Code quality
 flake8==6.1.0
