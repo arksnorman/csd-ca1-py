@@ -29,12 +29,10 @@ Parameters:
 
   InstanceType:
     Type: String
-    Default: t2.micro
-    Description: EC2 instance type (t2.micro is free tier eligible)
+    Default: t3.micro
+    Description: EC2 instance type (t3.micro is free tier eligible)
     AllowedValues:
-      - t2.micro
-      - t2.small
-      - t2.medium
+      - t3.micro
 
   AmiId:
     Type: String
@@ -207,20 +205,13 @@ Resources:
           systemctl daemon-reload
           systemctl enable bp-calculator.service
           
-          # Install CloudFormation helper scripts for Ubuntu
-          apt-get install -y python3-pip
-          pip3 install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
-          
-          # Signal CloudFormation that instance is ready
-          /usr/local/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region} || true
+          # Log completion
+          echo "UserData script completed successfully" >> /var/log/userdata.log
       Tags:
         - Key: Name
           Value: !Sub '${ApplicationName}-${BranchName}-instance'
         - Key: Branch
           Value: !Ref BranchName
-    CreationPolicy:
-      ResourceSignal:
-        Timeout: PT15M
 
 Outputs:
   InstanceId:
