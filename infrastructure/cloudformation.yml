@@ -147,18 +147,16 @@ Resources:
           #!/bin/bash
           set -e
           
-          # Update system
-          apt-get update -y
-          DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
-          
-          # Install Python 3.12 and required packages
-          apt-get install -y python3.12 python3.12-venv python3-pip git unzip awscli
+          DEBIAN_FRONTEND=noninteractive
+          sudo add-apt-repository ppa:deadsnakes/ppa -y
+
+          sudo apt-get install python3.12 python3-virtualenv git unzip -y
+          sudo snap install aws-cli --classic
           
           # Create symbolic link for python3.12
           update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
-          
-          # Install pip for Python 3.12
-          curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
+
+          sudo apt-get install python3-pip -y
           
           # Create app directory
           mkdir -p /opt/bp-calculator
