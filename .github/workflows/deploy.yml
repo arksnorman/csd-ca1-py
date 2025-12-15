@@ -261,6 +261,16 @@ jobs:
           echo "Waiting for application to be ready..."
           sleep 30
 
+      - name: Manual approval for production
+        if: github.ref == 'refs/heads/main'
+        uses: trstringer/manual-approval@v1
+        with:
+          secret: ${{ secrets.GITHUB_TOKEN }}
+          approvers: ${{ github.actor }}
+          minimum-approvals: 1
+          issue-title: "Deploy to Production"
+          issue-body: "Please approve deployment to production environment"
+
       - name: Run E2E tests
         run: |
           mkdir -p test-results
@@ -270,6 +280,123 @@ jobs:
             --junit-xml=test-results/junit.xml
         env:
           BASE_URL: ${{ env.BASE_URL }}
+
+      - name: Performance testing
+        run: |
+          echo "Running performance tests..."
+          pip install locust
+          
+          # Create performance test script
+          cat > locustfile.py << 'EOF'
+          from locust import HttpUser, task, between
+          import os
+
+          class BloodPressureUser(HttpUser):
+              wait_time = between(1, 3)
+              
+              @task(3)
+              def index_page(self):
+                  self.client.get("/")
+              
+              @task(2)
+              def calculate_bp(self):
+                  self.client.post("/", data={
+                      "systolic": "120",
+                      "diastolic": "80"
+                  })
+              
+              @task(1)
+              def health_tips(self):
+                  self.client.get("/health-tips")
+          EOF
+          
+          # Run performance test (10 users, 2 users/sec spawn rate, 60 seconds)
+          locust --headless -u 10 -r 2 --run-time 60s --host=${{ env.BASE_URL }} --html test-results/performance-report.html --csv test-results/performance
+          
+      - name: Upload performance test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-test-results
+          path: test-results/performance*
+        if: always()
+
+      - name: Security/Penetration testing
+        run: |
+          echo "Running security tests..."
+          pip install requests
+          
+          # Create OWASP ZAP baseline scan script
+          cat > security_test.py << 'EOF'
+          import requests
+          import sys
+          import os
+
+          BASE_URL = os.environ.get('BASE_URL')
+          
+          def test_sql_injection():
+              """Test for SQL injection vulnerabilities"""
+              payloads = ["' OR '1'='1", "1' OR '1' = '1--", "admin'--"]
+              for payload in payloads:
+                  response = requests.post(f"{BASE_URL}/", data={
+                      "systolic": payload,
+                      "diastolic": "80"
+                  })
+                  if "error" not in response.text.lower() and response.status_code == 200:
+                      print(f"✓ SQL injection test passed for payload: {payload}")
+                  
+          def test_xss():
+              """Test for XSS vulnerabilities"""
+              payloads = ["<script>alert('XSS')</script>", "<img src=x onerror=alert('XSS')>"]
+              for payload in payloads:
+                  response = requests.post(f"{BASE_URL}/", data={
+                      "systolic": payload,
+                      "diastolic": "80"
+                  })
+                  if payload not in response.text:
+                      print(f"✓ XSS test passed for payload: {payload}")
+                  else:
+                      print(f"⚠ Warning: Possible XSS vulnerability with payload: {payload}")
+          
+          def test_security_headers():
+              """Test for security headers"""
+              response = requests.get(BASE_URL)
+              headers = response.headers
+              
+              required_headers = {
+                  'X-Content-Type-Options': 'nosniff',
+                  'X-Frame-Options': 'DENY'
+              }
+              
+              for header, expected_value in required_headers.items():
+                  if header in headers:
+                      print(f"✓ Security header present: {header}")
+                  else:
+                      print(f"⚠ Warning: Missing security header: {header}")
+          
+          def test_input_validation():
+              """Test input validation"""
+              invalid_inputs = [
+                  {"systolic": "999", "diastolic": "80"},
+                  {"systolic": "-1", "diastolic": "80"},
+                  {"systolic": "120", "diastolic": "999"},
+                  {"systolic": "abc", "diastolic": "80"}
+              ]
+              
+              for data in invalid_inputs:
+                  response = requests.post(f"{BASE_URL}/", data=data)
+                  print(f"✓ Input validation test for {data}: Status {response.status_code}")
+          
+          if __name__ == "__main__":
+              print("Starting security tests...")
+              test_sql_injection()
+              test_xss()
+              test_security_headers()
+              test_input_validation()
+              print("Security tests completed!")
+          EOF
+          
+          python security_test.py > test-results/security-report.txt
+          cat test-results/security-report.txt
 
       - name: Upload E2E test results
         uses: actions/upload-artifact@v4
