@@ -23,8 +23,8 @@ htmlcov/
 # Python packaging
 *.egg
 *.egg-info/
-dist/
-build/
+/dist/
+/build/
 .Python
 *.so
 

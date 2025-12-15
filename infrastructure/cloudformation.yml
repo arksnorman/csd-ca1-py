@@ -150,7 +150,7 @@ Resources:
           DEBIAN_FRONTEND=noninteractive
           sudo add-apt-repository ppa:deadsnakes/ppa -y
 
-          sudo apt-get install python3.12 python3-virtualenv git unzip -y
+          sudo apt-get install python3.12 python3.12-venv python3-virtualenv git unzip -y
           sudo snap install aws-cli --classic
           
           # Create symbolic link for python3.12
