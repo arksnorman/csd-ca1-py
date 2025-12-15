@@ -45,7 +45,7 @@ Resources:
     Properties:
       ApplicationName: !Ref ElasticBeanstalkApplication
       EnvironmentName: !Ref EnvironmentName
-      SolutionStackName: "64bit Amazon Linux 2023 v4.3.0 running Python 3.12"
+      SolutionStackName: "64bit Amazon Linux 2023 v4.8.0 running Python 3.12"
       OptionSettings:
         # Instance settings
         - Namespace: aws:autoscaling:launchconfiguration
