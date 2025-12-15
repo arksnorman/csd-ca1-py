@@ -12,6 +12,16 @@ Parameters:
     Default: bp-py
     Description: EC2 Key Pair name for SSH access
 
+  VpcId:
+    Type: String
+    Default: vpc-0393d1315f5e64c75
+    Description: VPC ID where the EC2 instance will be deployed
+
+  SubnetId:
+    Type: String
+    Default: subnet-058dde5de2753fae4
+    Description: Subnet ID where the EC2 instance will be deployed (must be in the specified VPC)
+
   InstanceType:
     Type: String
     Default: t2.micro
@@ -32,6 +42,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Security group for BP Calculator EC2 instance
+      VpcId: !Ref VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
@@ -125,6 +136,7 @@ Resources:
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyName
       IamInstanceProfile: !Ref InstanceProfile
+      SubnetId: !Ref SubnetId
       SecurityGroupIds:
         - !Ref InstanceSecurityGroup
       UserData:

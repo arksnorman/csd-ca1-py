@@ -84,6 +84,8 @@ jobs:
             --parameter-overrides \
               ApplicationName=${{ env.APPLICATION_NAME }} \
               KeyName=${{ env.KEY_NAME }} \
+              VpcId=vpc-0393d1315f5e64c75 \
+              SubnetId=subnet-058dde5de2753fae4 \
             --capabilities CAPABILITY_IAM \
             --region ${{ env.AWS_REGION }}
 
