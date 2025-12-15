@@ -1,4 +1,4 @@
-"""BP Calculator Flask Application with Application Insights Telemetry"""
+"""BP Calculator Flask Application with AWS X-Ray and CloudWatch Monitoring"""
 
 import os
 import logging
@@ -14,26 +14,44 @@ HOST = os.environ.get("HOST", "127.0.0.1")
 PORT = int(os.environ.get("PORT", 5000))
 MODE = os.environ.get("MODE", "prod")
 
-# Setup Application Insights telemetry if configured
-connection_string = os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING")
+# Setup AWS X-Ray and CloudWatch if configured
+aws_region = os.environ.get("AWS_REGION", "us-east-1")
+cloudwatch_enabled = (
+    os.environ.get("CLOUDWATCH_ENABLED", "false").lower() == "true"
+)
 
-if connection_string:
+if cloudwatch_enabled:
     try:
-        from azure.monitor.opentelemetry import configure_azure_monitor
+        import boto3
+        import watchtower
+        from aws_xray_sdk.core import xray_recorder
+        from aws_xray_sdk.ext.flask.middleware import XRayMiddleware
 
-        # Configure Azure Monitor OpenTelemetry
-        configure_azure_monitor(connection_string=connection_string)
+        # Configure X-Ray for distributed tracing
+        xray_recorder.configure(service="bp-calculator")
+        XRayMiddleware(app, xray_recorder)
 
-        # Setup logging
+        # Configure CloudWatch Logs handler
         logger = logging.getLogger(__name__)
         logger.setLevel(logging.INFO)
-        logger.info("Application Insights telemetry initialized successfully")
-        app.logger.info("Azure Monitor OpenTelemetry configured")
+
+        cloudwatch_handler = watchtower.CloudWatchLogHandler(
+            log_group="/aws/elasticbeanstalk/bp-calculator-app",
+            stream_name="application",
+            boto3_client=boto3.client("logs", region_name=aws_region),
+        )
+        logger.addHandler(cloudwatch_handler)
+        app.logger.addHandler(cloudwatch_handler)
+
+        logger.info(
+            "AWS X-Ray and CloudWatch monitoring initialized successfully"
+        )
+        app.logger.info("AWS monitoring configured")
     except Exception as e:
-        app.logger.warning(f"Failed to initialize Application Insights: {e}")
+        app.logger.warning(f"Failed to initialize AWS monitoring: {e}")
 else:
     app.logger.warning(
-        "APPLICATIONINSIGHTS_CONNECTION_STRING not set - telemetry disabled"
+        "CLOUDWATCH_ENABLED not set to 'true' - AWS monitoring disabled"
     )
 
 
@@ -48,11 +66,15 @@ def index():
 
     if form.validate_on_submit():
         # Create BloodPressure object
-        bp = BloodPressure(systolic=form.systolic.data, diastolic=form.diastolic.data)
+        bp = BloodPressure(
+            systolic=form.systolic.data, diastolic=form.diastolic.data
+        )
 
         # Extra validation: Systolic must be greater than Diastolic
         if bp.systolic <= bp.diastolic:
-            form.systolic.errors.append("Systolic must be greater than Diastolic")
+            form.systolic.errors.append(
+                "Systolic must be greater than Diastolic"
+            )
             app.logger.warning(
                 f"Validation failed: systolic={bp.systolic} <= diastolic={bp.diastolic}"
             )
@@ -63,7 +85,11 @@ def index():
                 f"BP calculated: systolic={bp.systolic}, diastolic={bp.diastolic}, category={category.value}"
             )
             return render_template(
-                "index.html", form=form, bp=bp, category=category, validated=True
+                "index.html",
+                form=form,
+                bp=bp,
+                category=category,
+                validated=True,
             )
 
     return render_template(
@@ -92,7 +118,9 @@ def health_tips():
         "High Blood Pressure": HealthTips.get_tips(bp_high.category),
     }
     app.logger.info("Health tips page accessed")
-    return render_template("health_tips.html", tips_by_category=tips_by_category)
+    return render_template(
+        "health_tips.html", tips_by_category=tips_by_category
+    )
 
 
 @app.route("/favicon.ico")

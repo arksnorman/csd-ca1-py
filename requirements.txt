@@ -6,8 +6,10 @@ WTForms==3.1.1
 # Production server
 gunicorn==21.2.0
 
-# Telemetry and monitoring (Azure Monitor OpenTelemetry - Flask 3.x compatible)
-azure-monitor-opentelemetry==1.2.0
+# AWS Telemetry and monitoring
+aws-xray-sdk==2.12.0
+boto3==1.34.0
+watchtower==3.0.1
 
 # Testing dependencies
 pytest==7.4.3

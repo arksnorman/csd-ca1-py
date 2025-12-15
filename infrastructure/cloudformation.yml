@@ -86,7 +86,20 @@ Resources:
 
         - Namespace: aws:elasticbeanstalk:application:environment
           OptionName: SECRET_KEY
-          Value: !Sub "{{resolve:secretsmanager:${FlaskSecretKey}:SecretString:secret_key}}"
+          Value: !Sub '{{resolve:secretsmanager:${FlaskSecretKey}:SecretString:secret_key}}'
+
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: CLOUDWATCH_ENABLED
+          Value: 'true'
+
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: AWS_REGION
+          Value: !Ref 'AWS::Region'
+
+        # Enable X-Ray
+        - Namespace: aws:elasticbeanstalk:xray
+          OptionName: XRayEnabled
+          Value: 'true'
 
         # Health check settings
         - Namespace: aws:elasticbeanstalk:healthreporting:system
@@ -136,15 +149,28 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier
         - arn:aws:iam::aws:policy/AWSElasticBeanstalkWorkerTier
+        - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
       Policies:
         - PolicyName: SecretsManagerAccess
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: '2012-10-17'
             Statement:
               - Effect: Allow
                 Action:
                   - secretsmanager:GetSecretValue
                 Resource: !Ref FlaskSecretKey
+        - PolicyName: CloudWatchLogsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource: 'arn:aws:logs:*:*:*'
 
   # Instance Profile
   InstanceProfile:
