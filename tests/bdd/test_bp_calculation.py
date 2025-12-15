@@ -2,7 +2,7 @@
 
 import pytest
 from pytest_bdd import scenarios, given, when, then, parsers
-from models.blood_pressure import BloodPressure, BPCategory
+from models.blood_pressure import BloodPressure
 
 # Load scenarios
 scenarios("../features/bp_calculation.feature")
@@ -43,6 +43,6 @@ def calculate_category(context):
 def check_category(context, expected_category):
     """Check the calculated category"""
     actual_category = context["category"].value
-    assert (
-        actual_category == expected_category
-    ), f"Expected '{expected_category}' but got '{actual_category}'"
+    assert actual_category == expected_category, (
+        f"Expected '{expected_category}' but got '{actual_category}'"
+    )

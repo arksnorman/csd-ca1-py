@@ -1,0 +1,189 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Blood Pressure Calculator - Elastic Beanstalk Infrastructure"
+
+Parameters:
+  ApplicationName:
+    Type: String
+    Default: bp-calculator-app
+    Description: Name of the Elastic Beanstalk application
+
+  EnvironmentName:
+    Type: String
+    Default: bp-calculator-env
+    Description: Name of the Elastic Beanstalk environment
+
+  S3BucketName:
+    Type: String
+    Default: bp-calculator-deployments
+    Description: S3 bucket for deployment artifacts
+
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    Description: EC2 instance type (t2.micro is free tier eligible)
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t2.medium
+
+  PythonVersion:
+    Type: String
+    Default: "3.12"
+    Description: Python version for the application
+
+Resources:
+  # Elastic Beanstalk Application
+  ElasticBeanstalkApplication:
+    Type: AWS::ElasticBeanstalk::Application
+    Properties:
+      ApplicationName: !Ref ApplicationName
+      Description: Blood Pressure Calculator Flask Application
+
+  # Elastic Beanstalk Environment
+  ElasticBeanstalkEnvironment:
+    Type: AWS::ElasticBeanstalk::Environment
+    Properties:
+      ApplicationName: !Ref ElasticBeanstalkApplication
+      EnvironmentName: !Ref EnvironmentName
+      SolutionStackName: "64bit Amazon Linux 2023 v4.3.0 running Python 3.12"
+      OptionSettings:
+        # Instance settings
+        - Namespace: aws:autoscaling:launchconfiguration
+          OptionName: InstanceType
+          Value: !Ref InstanceType
+
+        - Namespace: aws:autoscaling:launchconfiguration
+          OptionName: IamInstanceProfile
+          Value: !Ref InstanceProfile
+
+        # Auto scaling settings
+        - Namespace: aws:autoscaling:asg
+          OptionName: MinSize
+          Value: "1"
+
+        - Namespace: aws:autoscaling:asg
+          OptionName: MaxSize
+          Value: "2"
+
+        # Load balancer settings
+        - Namespace: aws:elasticbeanstalk:environment
+          OptionName: EnvironmentType
+          Value: SingleInstance
+
+        - Namespace: aws:elasticbeanstalk:environment
+          OptionName: ServiceRole
+          Value: !Ref ServiceRole
+
+        # Python settings
+        - Namespace: aws:elasticbeanstalk:container:python
+          OptionName: WSGIPath
+          Value: app:app
+
+        # Environment variables
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: FLASK_ENV
+          Value: production
+
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SECRET_KEY
+          Value: !Sub "{{resolve:secretsmanager:${FlaskSecretKey}:SecretString:secret_key}}"
+
+        # Health check settings
+        - Namespace: aws:elasticbeanstalk:healthreporting:system
+          OptionName: SystemType
+          Value: enhanced
+
+        # Deployment settings
+        - Namespace: aws:elasticbeanstalk:command
+          OptionName: DeploymentPolicy
+          Value: AllAtOnce
+
+        # Logs
+        - Namespace: aws:elasticbeanstalk:cloudwatch:logs
+          OptionName: StreamLogs
+          Value: "true"
+
+        - Namespace: aws:elasticbeanstalk:cloudwatch:logs
+          OptionName: DeleteOnTerminate
+          Value: "false"
+
+  # IAM Role for Elastic Beanstalk Service
+  ServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: elasticbeanstalk.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkEnhancedHealth
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkManagedUpdatesCustomerRolePolicy
+
+  # IAM Role for EC2 Instances
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWorkerTier
+      Policies:
+        - PolicyName: SecretsManagerAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref FlaskSecretKey
+
+  # Instance Profile
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+  # Secrets Manager for Flask Secret Key
+  FlaskSecretKey:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${ApplicationName}-flask-secret-key"
+      Description: Flask application secret key
+      GenerateSecretString:
+        SecretStringTemplate: "{}"
+        GenerateStringKey: secret_key
+        PasswordLength: 32
+        ExcludeCharacters: '"@/\'
+
+Outputs:
+  ApplicationName:
+    Description: Elastic Beanstalk Application Name
+    Value: !Ref ElasticBeanstalkApplication
+    Export:
+      Name: !Sub "${AWS::StackName}-ApplicationName"
+
+  EnvironmentName:
+    Description: Elastic Beanstalk Environment Name
+    Value: !Ref ElasticBeanstalkEnvironment
+    Export:
+      Name: !Sub "${AWS::StackName}-EnvironmentName"
+
+  EnvironmentURL:
+    Description: URL of the Elastic Beanstalk environment
+    Value: !GetAtt ElasticBeanstalkEnvironment.EndpointURL
+
+  SecretKeyArn:
+    Description: ARN of the Flask secret key in Secrets Manager
+    Value: !Ref FlaskSecretKey
+    Export:
+      Name: !Sub "${AWS::StackName}-SecretKeyArn"

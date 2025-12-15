@@ -2,7 +2,6 @@
 
 import pytest
 from playwright.sync_api import Page, expect
-import time
 
 
 # Base URL for the application

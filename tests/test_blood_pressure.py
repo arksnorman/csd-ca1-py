@@ -1,6 +1,5 @@
 """Unit tests for BloodPressure model"""
 
-import pytest
 from models.blood_pressure import BloodPressure, BPCategory
 
 
