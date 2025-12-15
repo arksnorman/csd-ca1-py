@@ -175,9 +175,10 @@ jobs:
               'cd /tmp/bp-calculator-deploy',
               'aws s3 cp s3://$TEMP_BUCKET/deployment.zip .',
               'unzip -o deployment.zip',
-              'pip3.12 install -r requirements.txt',
               'rm -rf /opt/bp-calculator/*',
               'cp -r * /opt/bp-calculator/',
+              'python3 -m venv /opt/bp-calculator/.env',
+              '/opt/bp-calculator/.env/bin/pip3 install -r /opt/bp-calculator/requirements.txt',
               'systemctl restart bp-calculator.service',
               'sleep 3',
               'systemctl status bp-calculator.service'

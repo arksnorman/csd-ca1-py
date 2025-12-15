@@ -189,9 +189,9 @@ Resources:
           Type=simple
           User=root
           WorkingDirectory=/opt/bp-calculator
-          Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+          Environment="PATH=/opt/bp-calculator/.env/bin:/usr/local/bin:/usr/bin:/bin"
           EnvironmentFile=/opt/bp-calculator/.env
-          ExecStart=/usr/local/bin/gunicorn --bind 0.0.0.0:80 --workers 4 --timeout 600 app:app
+          ExecStart=/opt/bp-calculator/.env/bin/gunicorn --bind 0.0.0.0:80 --workers 4 --timeout 600 app:app
           Restart=always
           RestartSec=10
           
