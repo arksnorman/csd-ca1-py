@@ -175,13 +175,17 @@ jobs:
               'cd /tmp/bp-calculator-deploy',
               'aws s3 cp s3://$TEMP_BUCKET/deployment.zip .',
               'unzip -o deployment.zip',
+              'sudo cp /opt/bp-calculator/.env /tmp/bp-calculator-env-backup',
               'sudo rm -rf /opt/bp-calculator/*',
               'sudo cp -r * /opt/bp-calculator/',
-              'sudo python3 -m venv /opt/bp-calculator/.env',
-              'sudo /opt/bp-calculator/.env/bin/pip3 install -r /opt/bp-calculator/requirements.txt',
-              'systemctl restart bp-calculator.service',
+              'sudo mv /tmp/bp-calculator-env-backup /opt/bp-calculator/.env',
+              'cd /opt/bp-calculator',
+              'sudo python3.12 -m venv venv',
+              'sudo venv/bin/pip install --upgrade pip',
+              'sudo venv/bin/pip install -r requirements.txt',
+              'sudo systemctl restart bp-calculator.service',
               'sleep 3',
-              'systemctl status bp-calculator.service'
+              'sudo systemctl status bp-calculator.service'
             ]" \
             --region ${{ env.AWS_REGION }} \
             --query 'Command.CommandId' \
