@@ -195,9 +195,10 @@ jobs:
 
       - name: Install dependencies
         run: |
+          sudo apt-get install -y libasound2
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          playwright install chromium --with-deps
+          playwright install chromium
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -230,7 +231,6 @@ jobs:
             --junit-xml=test-results/junit.xml
         env:
           BASE_URL: ${{ env.BASE_URL }}
-        continue-on-error: true
 
       - name: Upload E2E test results
         uses: actions/upload-artifact@v4
