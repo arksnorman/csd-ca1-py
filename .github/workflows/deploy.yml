@@ -311,7 +311,7 @@ jobs:
               
               @task(1)
               def health_tips(self):
-                  self.client.get("/health-tips")
+                  self.client.get("/tips")
           EOF
           
           # Run performance test (10 users, 2 users/sec spawn rate, 60 seconds)
