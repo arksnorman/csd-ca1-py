@@ -11,6 +11,10 @@ on:
       - feature/*
   workflow_dispatch:
 
+permissions:
+  contents: read
+  issues: write
+
 env:
   AWS_REGION: eu-west-1
   APPLICATION_NAME: bp-calculator-app
